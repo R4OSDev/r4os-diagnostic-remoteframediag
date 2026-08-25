@@ -7,3 +7,6 @@ Dirty-Rect, Cursorstatus und chunkweises Lesen und meldet `RFDIAG result: OK`.
 
 RFDIAG erzeugt keine eigenen Desktop-Pixel. Es ist ein externer Konsument des
 oeffentlichen R4DESK-Vertrags und dient als Abnahmegrundlage fuer RDPSVC.
+Seit 0.69.47 registriert es diesen Konsumenten explizit, wartet begrenzt auf
+den vom ersten Acquire angeforderten Vollframe und gibt die Registrierung auf
+jedem Exitpfad wieder frei.

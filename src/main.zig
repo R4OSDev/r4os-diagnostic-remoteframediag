@@ -10,6 +10,20 @@ pub fn r4_app_main(r4_app: *r4os.App) i32 {
     };
 
     sys.println("RFDIAG");
+    const demand_supported = desk.supportsRemoteFrameDemand();
+    var frame_acquired = false;
+    if (demand_supported) {
+        const acquire_rc = desk.remoteFrameAcquire();
+        if (acquire_rc <= 0) {
+            sys.println("RFDIAG frame acquire failed");
+            return 1;
+        }
+        frame_acquired = true;
+    }
+    defer {
+        if (frame_acquired) _ = desk.remoteFrameRelease();
+    }
+
     const ok = checkRemoteFrame(&sys, &desk);
     sys.write("RFDIAG result: ");
     sys.println(if (ok) "OK" else "FAILED");
@@ -18,7 +32,12 @@ pub fn r4_app_main(r4_app: *r4os.App) i32 {
 
 fn checkRemoteFrame(sys: *const r4os.r4sys.Context, desk: *const r4os.r4desk.Context) bool {
     var info: r4os.abi.RemoteFrameInfo = .{};
-    const info_rc = desk.remoteFrameInfo(&info);
+    var info_rc = desk.remoteFrameInfo(&info);
+    var attempt: u32 = 0;
+    while (info_rc != 0 and attempt < 200) : (attempt += 1) {
+        sys.sleepTicks(1);
+        info_rc = desk.remoteFrameInfo(&info);
+    }
     if (info_rc != 0) return fail(sys, "RFDIAG frame-info unavailable");
     if (info.magic != r4os.abi.remote_frame_magic or info.version != r4os.abi.remote_frame_version) return fail(sys, "RFDIAG frame-info identity failed");
     if ((info.flags & r4os.abi.remote_frame_flag_ready) == 0 or
