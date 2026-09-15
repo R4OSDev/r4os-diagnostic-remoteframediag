@@ -1,4 +1,5 @@
 const r4os = @import("r4os");
+const std = @import("std");
 
 const chunk_pixels = 64;
 
@@ -24,21 +25,26 @@ pub fn r4_app_main(r4_app: *r4os.App) i32 {
         if (frame_acquired) _ = desk.remoteFrameRelease();
     }
 
-    const ok = checkRemoteFrame(&sys, &desk);
+    const leave_owned = std.ascii.indexOfIgnoreCase(std.mem.span(sys.argsRaw()), "/EXITOWNED") != null;
+    if (leave_owned) frame_acquired = false;
+    const ok = checkRemoteFrame(&sys, &desk, leave_owned);
     sys.write("RFDIAG result: ");
     sys.println(if (ok) "OK" else "FAILED");
     return if (ok) 0 else 1;
 }
 
-fn checkRemoteFrame(sys: *const r4os.r4sys.Context, desk: *const r4os.r4desk.Context) bool {
+fn checkRemoteFrame(sys: *const r4os.r4sys.Context, desk: *const r4os.r4desk.Context, leave_owned: bool) bool {
     var info: r4os.abi.RemoteFrameInfo = .{};
-    var info_rc = desk.remoteFrameInfo(&info);
+    var lease: r4os.abi.RemoteFrameLease = .{};
+    var info_rc = desk.remoteFrameSnapshotAcquire(0, &info, &lease);
     var attempt: u32 = 0;
     while (info_rc != 0 and attempt < 200) : (attempt += 1) {
         sys.sleepTicks(1);
-        info_rc = desk.remoteFrameInfo(&info);
+        info_rc = desk.remoteFrameSnapshotAcquire(0, &info, &lease);
     }
     if (info_rc != 0) return fail(sys, "RFDIAG frame-info unavailable");
+    defer if (!leave_owned) { _ = desk.remoteFrameSnapshotRelease(&lease); };
+    if (lease.id == 0 or lease.pixels_addr == 0 or lease.capacity_pixels < info.frame_pixels) return fail(sys, "RFDIAG snapshot lease failed");
     if (info.magic != r4os.abi.remote_frame_magic or info.version != r4os.abi.remote_frame_version) return fail(sys, "RFDIAG frame-info identity failed");
     if ((info.flags & r4os.abi.remote_frame_flag_ready) == 0 or
         (info.flags & r4os.abi.remote_frame_flag_dirty_valid) == 0 or
@@ -62,15 +68,23 @@ fn checkRemoteFrame(sys: *const r4os.r4sys.Context, desk: *const r4os.r4desk.Con
     }
 
     var head: [chunk_pixels]u32 = .{0} ** chunk_pixels;
-    var head_info: r4os.abi.RemoteFrameInfo = .{};
-    const head_rc = desk.remoteFrameRead(0, head[0..], &head_info);
-    if (head_rc <= 0 or head_info.revision != info.revision) return fail(sys, "RFDIAG head chunk failed");
+    const pixels: [*]const u32 = @ptrFromInt(lease.pixels_addr);
+    const head_rc: i32 = @intCast(@min(chunk_pixels, info.frame_pixels));
+    @memcpy(head[0..@intCast(head_rc)], pixels[0..@intCast(head_rc)]);
 
     const tail_offset = if (info.frame_pixels > chunk_pixels) info.frame_pixels - chunk_pixels else 0;
     var tail: [chunk_pixels]u32 = .{0} ** chunk_pixels;
-    var tail_info: r4os.abi.RemoteFrameInfo = .{};
-    const tail_rc = desk.remoteFrameRead(tail_offset, tail[0..], &tail_info);
-    if (tail_rc <= 0 or tail_info.revision != info.revision) return fail(sys, "RFDIAG tail chunk failed");
+    const tail_rc: i32 = @intCast(@min(chunk_pixels, info.frame_pixels - tail_offset));
+    @memcpy(tail[0..@intCast(tail_rc)], pixels[tail_offset..][0..@intCast(tail_rc)]);
+    // Multiple consumers of one immutable revision share storage. Releasing
+    // one exact token leaves the other valid; a repeated release is stale.
+    var peer_info: r4os.abi.RemoteFrameInfo = .{};
+    var peer: r4os.abi.RemoteFrameLease = .{};
+    if (desk.remoteFrameSnapshotAcquire(info.revision, &peer_info, &peer) == 0) {
+        const same = peer.id != lease.id and peer.pixels_addr == lease.pixels_addr and peer.epoch == lease.epoch;
+        if (desk.remoteFrameSnapshotRelease(&peer) != 0 or !same or desk.remoteFrameSnapshotRelease(&peer) >= 0)
+            return fail(sys, "RFDIAG snapshot sharing failed");
+    }
 
     var wait_info: r4os.abi.RemoteFrameInfo = .{};
     const wait_rc = desk.remoteFrameWait(info.revision, 1, &wait_info);
@@ -78,6 +92,15 @@ fn checkRemoteFrame(sys: *const r4os.r4sys.Context, desk: *const r4os.r4desk.Con
 
     const head_sum = checksum(head[0..@as(usize, @intCast(head_rc))]);
     const tail_sum = checksum(tail[0..@as(usize, @intCast(tail_rc))]);
+    if (checksum(pixels[0..@intCast(head_rc)]) != head_sum or checksum(pixels[tail_offset..][0..@intCast(tail_rc)]) != tail_sum)
+        return fail(sys, "RFDIAG leased pixels changed");
+    var stats: r4os.abi.RemoteFrameCaptureStats = .{};
+    if (desk.remoteFrameCaptureStats(&stats) != 0 or stats.leases == 0 or stats.leases > 64 or stats.snapshots > 3 or
+        stats.live_bytes > 64 * 1024 * 1024 or stats.snapshot_bytes > 3 * 64 * 1024 * 1024) return fail(sys, "RFDIAG snapshot bounds failed");
+    sys.write("RFDIAG capture: leases="); sys.printU64(stats.leases);
+    sys.write(" publisher-bytes="); sys.printU64(stats.published_bytes);
+    sys.write(" snapshot-copy-bytes="); sys.printU64(stats.snapshot_copy_bytes);
+    sys.write(" max-reader-ns="); sys.printU64(stats.max_reader_ns); sys.println("");
     sys.write("RFDIAG snapshot: OK mode=");
     sys.printU64(@as(u64, info.width));
     sys.write("x");
