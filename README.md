@@ -4,13 +4,16 @@
 
 ## Package
 
-- Version: `0.1.1`
+- Version: `0.1.3`
 - Image target: `/R4OS/SOFTWARE/TERMINAL/DIAG/RFDIAG.R4X`
 - Image scope: `test`
 - Canonical project manifest: `module.R4MF`
 
 The manifest is the single source of truth for the artifact, imports, image
 target, and package metadata.
+
+The test profile includes this diagnostic; Full does not. For an explicit
+hardware probe, run the verified artifact from a temporary diagnostic path.
 
 ## Build
 
