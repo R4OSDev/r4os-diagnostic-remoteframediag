@@ -41,3 +41,13 @@ Detailed German technical notes from the migration are preserved in
 Original R4OS material is licensed under Apache License 2.0. See `LICENSE`
 and `NOTICE`. Any repository-specific external material is documented in
 `THIRD_PARTY_NOTICES.md`.
+
+## Spectra migration
+
+The public snapshot oracle now belongs to Spectra in
+`../Spectra/src/checks/remote_frame.zig`. This temporary module calls that one
+body; it no longer contains a separate check implementation. Use
+`SPECTRA CHECK REMOTEFRAME [/EXITOWNED] [/JSON]` for central orchestration,
+including a genuinely owned exit child and completion/reap/retirement checks.
+The sibling source is required for this transitional build. Module retirement
+and caller removal are planned for roadmap0.86.77.
