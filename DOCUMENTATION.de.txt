@@ -1,12 +1,14 @@
-﻿RFDIAG.R4X
-==========
+﻿RemoteFrameDiag seit0.86.77 ausgemustert
+======================================
 
-RFDIAG prueft den R4DESK-Remote-Frame-Vertrag. Das Programm liest den zuletzt
-vom Desktop veroeffentlichten XRGB32-Snapshot, prueft Geometrie, Revision,
-Dirty-Rect, Cursorstatus und chunkweises Lesen und meldet `RFDIAG result: OK`.
+Aktueller Einstieg: SPECTRA CHECK REMOTEFRAME [/EXITOWNED] [/JSON].
+Einziger oeffentlicher Snapshot-Pruefkoerper beim Spectrabesitzer:
+src/checks/remote_frame.zig. Echtes eigenes Kindende/Reap/Retirement:
+src/remote_frame_check.zig. Private Captureszenen steuert ausdruecklich
+SPECTRA CHECK DESKTOP /CAPTURE bei isoliertem Desktop.
 
-RFDIAG erzeugt keine eigenen Desktop-Pixel. Es ist ein externer Konsument des
-oeffentlichen R4DESK-Vertrags und dient als Abnahmegrundlage fuer RDPSVC.
-Seit 0.69.47 registriert es diesen Konsumenten explizit, wartet begrenzt auf
-den vom ersten Acquire angeforderten Vollframe und gibt die Registrierung auf
-jedem Exitpfad wieder frei.
+Kein aktives RFDIAG-Modul, Manifest, Build, Image- oder Exportziel mehr.
+GitHub-Repository/Historie und Lizenz-/Notice-/Provenienzdateien bleiben.
+Letzter Quellcommit und qualifizierter Ersatzcommit stehen in README.md;
+aktueller Fachbeleg und Grenzen in Docs/Diagnostics/Spectra.txt.
+Historische Mess-/Exportdaten brauchen kein installiertes Altartefakt.
